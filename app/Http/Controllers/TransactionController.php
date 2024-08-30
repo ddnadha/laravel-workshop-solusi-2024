@@ -47,38 +47,40 @@ class TransactionController extends Controller
     public function store(Request $request)
     {
 
-        // DB::beginTransaction();
-        // try {
-        // get items in cart
-        $savedCart = collect($request->session()->get('cart'));
+        DB::beginTransaction();
+        try {
+            // get items in cart
+            $savedCart = collect($request->session()->get('cart'));
 
-        // create new Transaction instance
-        $transaction = $request->user()->transaction()->create([
-            'total' => $savedCart->sum(fn($c) => $c->qty * $c->price)
-        ]);
-
-        // save item in cart to transaction
-        $savedCart->each(function ($cart) use ($transaction) {
-            $item = Item::findOrFail($cart->item_id);
-            $transaction->items()->attach($item, [
-                'qty' => $cart->qty,
-                'price' => $item->price,
+            // create new Transaction instance
+            $transaction = $request->user()->transaction()->create([
+                'total' => $savedCart->sum(fn($c) => $c->qty * $c->price)
             ]);
-        });
 
-        // clear cart
-        $request->session()->forget('cart');
-        // $request->session()->flush();
+            // save item in cart to transaction
+            $savedCart->each(function ($cart) use ($transaction) {
+                $item = Item::findOrFail($cart->item_id);
+                $transaction->items()->attach($item, [
+                    'qty' => $cart->qty,
+                    'price' => $item->price,
+                ]);
+                $item->stock -= $cart->qty;
+                $item->save();
+            });
 
-        // commit save to database
-        DB::commit();
+            // clear cart
+            $request->session()->forget('cart');
+            // $request->session()->flush();
 
-        return redirect()->route('transaction.index')->with('success', 'Berhasil membuat transaksi');
-        // } catch (Exception $e) {
-        //     // rollback if something wrong happened
-        //     DB::rollBack();
-        //     return redirect()->back()->with('error', 'Terjadi Kesalahan');
-        // }
+            // commit save to database
+            DB::commit();
+
+            return redirect()->route('transaction.index')->with('success', 'Berhasil membuat transaksi');
+        } catch (Exception $e) {
+            // rollback if something wrong happened
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Terjadi Kesalahan');
+        }
     }
 
     /**
